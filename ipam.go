@@ -2,8 +2,12 @@ package main
 
 import (
 	"log"
+	"reflect"
+
+	"os"
 
 	"github.com/docker/go-plugins-helpers/ipam"
+	uuid "github.com/satori/go.uuid"
 )
 
 //ipam driver for appnet
@@ -11,7 +15,6 @@ type AppnetIpam struct {
 }
 
 //激活插件
-/*
 func (aIpam *AppnetIpam) PluginActivate(r interface{}) (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"Implements": []interface{}{
@@ -19,37 +22,58 @@ func (aIpam *AppnetIpam) PluginActivate(r interface{}) (map[string]interface{}, 
 		}}, nil
 }
 
-func (aIpam *AppnetIpam) RequestAddress(r interface{}) (map[string]interface{}, error) {
-	return nil, nil
+func (aIpam *AppnetIpam) GetCapabilities() (*ipam.CapabilitiesResponse, error) {
+	logHandler.Debug("iparm --->GetCapabilities")
+	return &ipam.CapabilitiesResponse{RequiresMACAddress: true}, nil
 }
 
-func (aIpam *AppnetIpam) ReleaseAddress(r interface{}) (map[string]interface{}, error) {
-	return nil, nil
+func (aIpam *AppnetIpam) GetDefaultAddressSpaces() (*ipam.AddressSpacesResponse, error) {
+	logHandler.Debug("ipam -->GetDefaultAddressSpaces")
+	asp := ipam.AddressSpacesResponse{
+		LocalDefaultAddressSpace:  "localAppnet",
+		GlobalDefaultAddressSpace: "globalAppnet",
+	}
+	return &asp, nil
 }
 
-func (aIpam *AppnetIpam) RequestPool(r interface{}) (map[string]interface{}, error) {
-	return nil, nil
+func (aIpam *AppnetIpam) RequestPool(req *ipam.RequestPoolRequest) (*ipam.RequestPoolResponse, error) {
+
+	logHandler.Debug("ipam -->RequestPool")
+	logHandler.Debug("%v", *req)
+	//return nil, nil
+	uuidStr := uuid.NewV4().String()
+
+	//Pool必须是一个CIDR地址
+	return &ipam.RequestPoolResponse{PoolID: uuidStr, Pool: req.Pool}, nil
 }
 
-func (aIpam *AppnetIpam) ReleasePool(r interface{}) (map[string]interface{}, error) {
-	return nil, nil
+func (aIpam *AppnetIpam) ReleasePool(req *ipam.ReleasePoolRequest) error {
+	logHandler.Debug("ipam -->ReleaseAddressRequestPool")
+	logHandler.Debug("%v", *req)
+	return nil
+}
+func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.RequestAddressResponse, error) {
+	logHandler.Debug("ipam --->RequestAddress")
+	logHandler.Debug("%v", *req)
+
+	//必须是CIDR地址
+	return &ipam.RequestAddressResponse{
+		Address: "192.168.15.1/24",
+	}, nil
 }
 
-func (aIpam *AppnetIpam) GetCapabilities(r interface{}) (map[string]interface{}, error) {
-	return nil, nil
+func (aIpam *AppnetIpam) ReleaseAddress(req *ipam.ReleaseAddressRequest) error {
+	logHandler.Debug("ipam ---> ReleaseAddress")
+	logHandler.Debug("%v", *req)
+	return nil
 }
-
-func (aIpam *AppnetIpam) GetDefaultAddressSpaces(r interface{}) (map[string]interface{}, error) {
-	return nil, nil
-}
-
 
 type ipamCall struct {
 	url string
 	f   func(r interface{}) (map[string]interface{}, error)
 	t   reflect.Type
 }
-*/
+
 func NewAppnetIpam() *AppnetIpam {
 	return &AppnetIpam{}
 }
@@ -64,16 +88,15 @@ func fileExists(filePath string) (bool, error) {
 
 	return true, err
 }
-
 func deleteFile(filePath string) error {
 	return os.Remove(filePath)
 }
 
-func setupSocker(pluginDir string, driverName string) string {
+func setupSocket(pluginDir string, driverName string) string {
 	if err := os.MkdirAll(pluginDir, 0700); err != nil {
-		if !os.isExists(err) {
+		if !os.IsExist(err) {
 			log.Panicf("Create Plugin Directory error:'%s'", err)
-			ox.Exit(1)
+			os.Exit(1)
 		}
 	}
 
@@ -100,8 +123,11 @@ func setupSocker(pluginDir string, driverName string) string {
 }
 
 func main() {
-	config := LoadConfig()
+	//	config := LoadConfig()
+	//	setupSocket(config.PluginDir, config.DriverName)
 
+	initLogger("./ipam.log")
+	logHandler.Debug("create appnet ipam handler...")
 	aIpam := NewAppnetIpam()
 	/*
 		ipamCalls := []ipamCalls{
@@ -116,5 +142,10 @@ func main() {
 	*/
 
 	h := ipam.NewHandler(aIpam)
-	h.ServeTCP("appnet", ":9527")
+
+	logHandler.Debug("serve 9527 ...")
+	err := h.ServeTCP("appnet", ":9527")
+	if err != nil {
+		logHandler.Error("%v", err)
+	}
 }
