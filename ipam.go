@@ -1,8 +1,8 @@
 package main
 
 import (
+	"errors"
 	"log"
-	"reflect"
 
 	"os"
 
@@ -41,10 +41,29 @@ func (aIpam *AppnetIpam) RequestPool(req *ipam.RequestPoolRequest) (*ipam.Reques
 	logHandler.Debug("ipam -->RequestPool")
 	logHandler.Debug("%v", *req)
 	//return nil, nil
+	if len(req.Pool) == 0 {
+		return nil, errors.New("subnet has invalid CIDR addr")
+	}
+
 	uuidStr := uuid.NewV4().String()
+	ipnetStr, err := ParseCIDR(req.Pool)
+	if err != nil {
+		return nil, err
+	}
+
+	PoolManager.lock()
+	defer PoolManager.unlock()
+	netpool := NewNetPool()
+	netpool.get()
+	netpool.Subnet = ipnetStr
+	netpool.lowIp = ipAdd(ipnetStr.IP, 1)
+	netpool.maxIp = ipAdd(ipnetStr.IP, ipnetStr.Mask.Size())
+	PoolManager.Pools[uuidStr] = *netpool
+	logHandler.Debug("%v,%v,%v", netpool.Subnet.String(), netpool.lowIp.String(), netpool.maxIp.String())
+	//	netpool.lowIp =
 
 	//Pool必须是一个CIDR地址
-	return &ipam.RequestPoolResponse{PoolID: uuidStr, Pool: req.Pool}, nil
+	return &ipam.RequestPoolResponse{PoolID: uuidStr, Pool: ipnetStr.String()}, nil
 }
 
 func (aIpam *AppnetIpam) ReleasePool(req *ipam.ReleasePoolRequest) error {
@@ -52,26 +71,46 @@ func (aIpam *AppnetIpam) ReleasePool(req *ipam.ReleasePoolRequest) error {
 	logHandler.Debug("%v", *req)
 	return nil
 }
+
 func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.RequestAddressResponse, error) {
 	logHandler.Debug("ipam --->RequestAddress")
 	logHandler.Debug("%v", *req)
 
 	//必须是CIDR地址
-	return &ipam.RequestAddressResponse{
-		Address: "192.168.15.1/24",
-	}, nil
+	PoolManager.lock()
+	defer PoolManager.unlock()
+	pool, exists := PoolManager.Pools[req.PoolID]
+	if !exists {
+		return nil, errors.New("pool %v doesn't exist")
+	}
+
+	var addr string
+	var err error
+	for k, v := range req.Options {
+		switch k {
+		case "RequestAddressType":
+			if v == "com.docker.network.gateway" {
+				addr, err = pool.GetGateway(pool.Subnet)
+				if err != nil {
+					return nil, err
+				}
+
+				return &ipam.RequestAddressResponse{
+					Address: addr,
+				}, nil
+			}
+		case "com.docker.network.endpoint.macaddres":
+		}
+	}
+
+	//
+	return nil, nil
 }
 
 func (aIpam *AppnetIpam) ReleaseAddress(req *ipam.ReleaseAddressRequest) error {
 	logHandler.Debug("ipam ---> ReleaseAddress")
 	logHandler.Debug("%v", *req)
 	return nil
-}
-
-type ipamCall struct {
-	url string
-	f   func(r interface{}) (map[string]interface{}, error)
-	t   reflect.Type
 }
 
 func NewAppnetIpam() *AppnetIpam {
