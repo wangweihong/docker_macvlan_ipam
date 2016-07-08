@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 
 	"os"
@@ -23,7 +24,7 @@ func (aIpam *AppnetIpam) PluginActivate(r interface{}) (map[string]interface{}, 
 }
 
 func (aIpam *AppnetIpam) GetCapabilities() (*ipam.CapabilitiesResponse, error) {
-	logHandler.Debug("iparm --->GetCapabilities")
+	logHandler.Debug("ipam --->GetCapabilities")
 	return &ipam.CapabilitiesResponse{RequiresMACAddress: true}, nil
 }
 
@@ -40,14 +41,15 @@ func (aIpam *AppnetIpam) RequestPool(req *ipam.RequestPoolRequest) (*ipam.Reques
 
 	logHandler.Debug("ipam -->RequestPool")
 	logHandler.Debug("%v", *req)
-	//return nil, nil
 	if len(req.Pool) == 0 {
 		return nil, errors.New("subnet has invalid CIDR addr")
 	}
 
 	uuidStr := uuid.NewV4().String()
-	ipnetStr, err := ParseCIDR(req.Pool)
+	logHandler.Debug("generate uuid ===>: %v", uuidStr)
+	ipnet, err := ParseCIDR(req.Pool)
 	if err != nil {
+		logHandler.Debug("parse cidr [%v] fail:%v", req.Pool, err)
 		return nil, err
 	}
 
@@ -55,20 +57,31 @@ func (aIpam *AppnetIpam) RequestPool(req *ipam.RequestPoolRequest) (*ipam.Reques
 	defer PoolManager.unlock()
 	netpool := NewNetPool()
 	netpool.get()
-	netpool.Subnet = ipnetStr
-	netpool.lowIp = ipAdd(ipnetStr.IP, 1)
-	netpool.maxIp = ipAdd(ipnetStr.IP, ipnetStr.Mask.Size())
+	netpool.Subnet = ipnet
+
+	netpool.lowIp = ipAdd(ipnet.IP, 1)
+	netpool.maxIp = getMaxIP(ipnet)
 	PoolManager.Pools[uuidStr] = *netpool
-	logHandler.Debug("%v,%v,%v", netpool.Subnet.String(), netpool.lowIp.String(), netpool.maxIp.String())
-	//	netpool.lowIp =
+	logHandler.Debug("subnet:%v,lowestip:%v,highest%v，", netpool.Subnet.String(), netpool.lowIp.String(), netpool.maxIp.String())
 
 	//Pool必须是一个CIDR地址
-	return &ipam.RequestPoolResponse{PoolID: uuidStr, Pool: ipnetStr.String()}, nil
+	return &ipam.RequestPoolResponse{PoolID: uuidStr, Pool: ipnet.String()}, nil
 }
 
 func (aIpam *AppnetIpam) ReleasePool(req *ipam.ReleasePoolRequest) error {
-	logHandler.Debug("ipam -->ReleaseAddressRequestPool")
+	logHandler.Debug("ipam -->ReleasePool")
 	logHandler.Debug("%v", *req)
+
+	PoolManager.lock()
+	defer PoolManager.unlock()
+
+	logHandler.Debug("start to release pool [%v]", req.PoolID)
+	err := PoolManager.ReleasePool(req.PoolID)
+	if err != nil {
+		logHandler.Error("release pool fail:%v", err)
+		return fmt.Errorf("release pool fail:%v", err)
+	}
+
 	return nil
 }
 
@@ -90,16 +103,43 @@ func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.
 		switch k {
 		case "RequestAddressType":
 			if v == "com.docker.network.gateway" {
+				logHandler.Debug("start to create gateway address")
 				addr, err = pool.GetGateway(pool.Subnet)
 				if err != nil {
 					return nil, err
 				}
-
+				logHandler.Debug("gateway ip :%v", addr)
 				return &ipam.RequestAddressResponse{
 					Address: addr,
 				}, nil
 			}
+			//这里这个ip地址应该怎么处理？？
+			//要处理mac地址的问题.不同容器使用了同一个mac地址，ip不同会出现问题。
+			//会出现mac地址相同的问题吗？
+			//暂时先不考虑
 		case "com.docker.network.endpoint.macaddres":
+			//已分配ip地址的mac地址不再分配ip
+			logHandler.Debug("check if mac address [%v] has used", v)
+			_, exists := PoolManager.macMapping[v]
+			if exists {
+				return nil, fmt.Errorf("mac addr [%v] has already got an ip", v)
+			}
+
+			ipaddr, err := pool.CreateNewAddress(req.Address)
+			if err != nil {
+				return nil, err
+			}
+
+			//记录mac地址映射的ip
+			PoolManager.macMapping[v] = ipaddr
+			pool.get()
+			return &ipam.RequestAddressResponse{
+				Address: ipaddr.String(),
+			}, nil
+
+		default:
+			logHandler.Debug("unhandler reqOption %v[%v]", k, v)
+
 		}
 	}
 
@@ -110,6 +150,32 @@ func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.
 func (aIpam *AppnetIpam) ReleaseAddress(req *ipam.ReleaseAddressRequest) error {
 	logHandler.Debug("ipam ---> ReleaseAddress")
 	logHandler.Debug("%v", *req)
+	PoolManager.lock()
+	defer PoolManager.unlock()
+
+	pool, exists := PoolManager.Pools[req.PoolID]
+	if !exists {
+		logHandler.Debug("pool[%v] doesn't exists", req.PoolID)
+		return fmt.Errorf("pool doesn't exists")
+	}
+
+	logHandler.Debug("start to release address [%v]", req.Address)
+	ip, err := pool.ReleaseAddress(req.Address)
+	if err != nil {
+		return fmt.Errorf("release address fail for %v", err)
+	}
+
+	logHandler.Debug("start to clean mac-ip mapping")
+	for k, v := range PoolManager.macMapping {
+		logHandler.Debug("macMap[%v](%v) <===> %v", k, v.String(), ip.String())
+		if v.String() == ip.String() {
+			delete(PoolManager.macMapping, k)
+			return nil
+		}
+	}
+
+	pool.put()
+	logHandler.Warn("bug: ip doesn't mapped to mac addr")
 	return nil
 }
 
@@ -168,17 +234,6 @@ func main() {
 	initLogger("./ipam.log")
 	logHandler.Debug("create appnet ipam handler...")
 	aIpam := NewAppnetIpam()
-	/*
-		ipamCalls := []ipamCalls{
-			{"/Plugin.Activate", aIpam.PluginActivate, nil},
-			{"/IpamDriver.GetCapabilities", aIpam.GetCapabilities, nil},
-			{"/IpamDriver.GetDefaultAddressSpaces", aIpam.GetDefaultAddressSpaces, nil},
-			{"/IpamDriver.RequestPool", aIpam.RequestPool, nil},
-			{"/IpamDriver.ReleasePool", aIpam.ReleasePool, nil},
-			{"/IpamDriver.RequestAddress", aIpam.RequestAddress, nil},
-		{"/IpamDriver.ReleaseAddress", aIpam.ReleasePool, nil},
-		}
-	*/
 
 	h := ipam.NewHandler(aIpam)
 
