@@ -16,3 +16,14 @@
 4.创建macvlan网络
 `docker network create -d macvlan --ipam-driver=appnet --subnet=192.168.15.2/24 --gateway=192.168.15.1 -o parent=ens33 -o macvlan_mode=bridge ens33_1
 `
+
+
+## 编译方法
+1.进入appipam代码目录
+执行`docker build -f Dockerfile.build -t appipam-build .` 生成appipam-build镜像
+
+2.返回到appipam父目录
+执行`docker run -rm -v `pwd`:/src /appipam-build` 生成代码目录
+
+3.编译后在程序文件在appipam父目录下dist目录中
+
