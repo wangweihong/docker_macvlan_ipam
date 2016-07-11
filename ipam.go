@@ -44,7 +44,6 @@ func (aIpam *AppnetIpam) RequestPool(req *ipam.RequestPoolRequest) (*ipam.Reques
 	if len(req.Pool) == 0 {
 		return nil, errors.New("subnet has invalid CIDR addr")
 	}
-
 	uuidStr := uuid.NewV4().String()
 	logHandler.Debug("generate uuid ===>: %v", uuidStr)
 	ipnet, err := ParseCIDR(req.Pool)
@@ -59,10 +58,17 @@ func (aIpam *AppnetIpam) RequestPool(req *ipam.RequestPoolRequest) (*ipam.Reques
 	netpool.get()
 	netpool.Subnet = ipnet
 
-	netpool.lowIp = ipAdd(ipnet.IP, 1)
-	netpool.maxIp = getMaxIP(ipnet)
+	netpool.LowIp = ipAdd(ipnet.IP, 1)
+	netpool.MaxIp = getMaxIP(ipnet)
 	PoolManager.Pools[uuidStr] = *netpool
-	logHandler.Debug("subnet:%v,lowestip:%v,highest%v，", netpool.Subnet.String(), netpool.lowIp.String(), netpool.maxIp.String())
+	logHandler.Debug("subnet:%v,lowestip:%v,highest%v，", netpool.Subnet.String(), netpool.LowIp.String(), netpool.MaxIp.String())
+
+	//这里需要完善备份失败后,数据应当如何还原
+	err = BackendClient.Save(PoolManager)
+	if err != nil {
+		logHandler.Debug("backend save fail")
+		return nil, err
+	}
 
 	//Pool必须是一个CIDR地址
 	return &ipam.RequestPoolResponse{PoolID: uuidStr, Pool: ipnet.String()}, nil
@@ -80,6 +86,13 @@ func (aIpam *AppnetIpam) ReleasePool(req *ipam.ReleasePoolRequest) error {
 	if err != nil {
 		logHandler.Error("release pool fail:%v", err)
 		return fmt.Errorf("release pool fail:%v", err)
+	}
+
+	//这里需要完善备份失败后,数据应当如何还原
+	err = BackendClient.Save(PoolManager)
+	if err != nil {
+		logHandler.Debug("backend save fail")
+		return err
 	}
 
 	return nil
@@ -109,6 +122,19 @@ func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.
 					return nil, err
 				}
 				logHandler.Debug("gateway ip :%v", addr)
+
+				//这里需要完善备份失败后,数据应当如何还原
+				err = BackendClient.Save(PoolManager)
+				if err != nil {
+					ip, err1 := pool.ReleaseAddress(addr)
+					if err1 != nil {
+						logHandler.Debug("release address[%v] fail:%v", ip.String(), err.Error())
+					}
+					pool.Gateway = ""
+					logHandler.Debug("backend save fail")
+					return nil, err
+				}
+
 				return &ipam.RequestAddressResponse{
 					Address: addr,
 				}, nil
@@ -120,7 +146,7 @@ func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.
 		case "com.docker.network.endpoint.macaddres":
 			//已分配ip地址的mac地址不再分配ip
 			logHandler.Debug("check if mac address [%v] has used", v)
-			_, exists := PoolManager.macMapping[v]
+			_, exists := PoolManager.MacMapping[v]
 			if exists {
 				return nil, fmt.Errorf("mac addr [%v] has already got an ip", v)
 			}
@@ -131,8 +157,21 @@ func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.
 			}
 
 			//记录mac地址映射的ip
-			PoolManager.macMapping[v] = ipaddr
+			PoolManager.MacMapping[v] = ipaddr
 			pool.get()
+
+			//这里需要完善备份失败后,数据应当如何还原
+			err = BackendClient.Save(PoolManager)
+			if err != nil {
+				ip, err1 := pool.ReleaseAddress(addr)
+				if err1 != nil {
+					logHandler.Debug("release address[%v] fail:%v", ip.String(), err.Error())
+				}
+				delete(PoolManager.MacMapping, v)
+				logHandler.Debug("backend save fail")
+				return nil, err
+			}
+
 			return &ipam.RequestAddressResponse{
 				Address: ipaddr.String(),
 			}, nil
@@ -166,10 +205,10 @@ func (aIpam *AppnetIpam) ReleaseAddress(req *ipam.ReleaseAddressRequest) error {
 	}
 
 	logHandler.Debug("start to clean mac-ip mapping")
-	for k, v := range PoolManager.macMapping {
+	for k, v := range PoolManager.MacMapping {
 		logHandler.Debug("macMap[%v](%v) <===> %v", k, v.String(), ip.String())
 		if v.String() == ip.String() {
-			delete(PoolManager.macMapping, k)
+			delete(PoolManager.MacMapping, k)
 			return nil
 		}
 	}
@@ -228,11 +267,25 @@ func setupSocket(pluginDir string, driverName string) string {
 }
 
 func main() {
-	//	config := LoadConfig()
-	//	setupSocket(config.PluginDir, config.DriverName)
+	config := LoadConfig()
+	if len(config.BackendUrl) == 0 {
+		panic("ipam must set backend url for backend store")
+	}
 
 	initLogger("./ipam.log")
 	logHandler.Debug("create appnet ipam handler...")
+
+	bd := NewBackend(config.BackendUrl)
+	if bd == nil {
+		panic("create ipam backend client fail")
+	}
+	IpamBackend = bd
+
+	go IpamBackend.HealthCheck()
+	//这里还需要进行backend和内存中的同步
+
+	//	setupSocket(config.PluginDir, config.DriverName)
+
 	aIpam := NewAppnetIpam()
 
 	h := ipam.NewHandler(aIpam)

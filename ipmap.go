@@ -15,6 +15,7 @@ type IPMap struct {
 	*bitmap.Bitmap
 }
 
+//指定范围内没有设置位的最低索引
 func (this *IPMap) FindLowestUnsetBit(start uint64, end uint64) (uint64, error) {
 	if start > bitSize || end > bitSize || start > end {
 		return uint64(0), fmt.Errorf("[%v:%v] out of bitmap range", start, end)

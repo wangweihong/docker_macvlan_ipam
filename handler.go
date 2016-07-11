@@ -10,23 +10,24 @@ import (
 
 var (
 	PoolManager NetPools
+	IpamBackend Backend
 )
 
 type NetPools struct {
 	Pools  map[string]NetPool
 	rwlock *sync.RWMutex
 	//macaddress:net.IP
-	macMapping map[string]net.IP
+	MacMapping map[string]net.IP
 }
 
 type NetPool struct {
-	reference int
+	Reference int
 	Subnet    net.IPNet
 	Gateway   string
 	//记录当前池使用了哪些网络 key:"192.168.0.1"
 	IPs   map[string]net.IP //value:转换后的数值
-	lowIp net.IP            //最低可用IP转换成数值
-	maxIp net.IP            //最高可以用IP转换数值
+	LowIp net.IP            //最低可用IP转换成数值
+	MaxIp net.IP            //最高可以用IP转换数值
 }
 
 func NewNetPool() *NetPool {
@@ -46,11 +47,10 @@ func (n *NetPools) unlock() {
 }
 
 func (n *NetPool) get() {
-	n.reference += 1
+	n.Reference += 1
 }
-
 func (n *NetPool) put() {
-	n.reference -= 1
+	n.Reference -= 1
 }
 
 //数组反向
@@ -85,7 +85,6 @@ func IPtoNum(originIp net.IP) uint32 {
 	copy(ip, originIp)
 
 	a := []byte{}
-
 	if len(ip) == 16 {
 		for i := 12; i < 16; i++ {
 			a = append(a, ip[i])
@@ -183,8 +182,8 @@ func (pool *NetPool) GetGateway(ipnet net.IPNet) (string, error) {
 		return pool.Gateway, nil
 	}
 
-	start := IPtoNum(pool.lowIp)
-	end := IPtoNum(pool.maxIp)
+	start := IPtoNum(pool.LowIp)
+	end := IPtoNum(pool.MaxIp)
 
 	//找到一个可用的IP地址
 	var GatewayIP net.IP
@@ -259,9 +258,8 @@ func (pool *NetPool) CreateNewAddress(reqAddr string) (net.IP, error) {
 		//
 
 		ipnet := pool.Subnet
-
-		start := IPtoNum(pool.lowIp)
-		end := IPtoNum(pool.maxIp)
+		start := IPtoNum(pool.LowIp)
+		end := IPtoNum(pool.MaxIp)
 
 		//找到一个可用的IP地址
 		var newip net.IP
@@ -341,12 +339,12 @@ func (n *NetPools) ReleasePool(poolID string) error {
 
 	pool.put()
 
-	if pool.reference == 0 {
+	if pool.Reference == 0 {
 		for _, v := range pool.IPs {
 			//1.清除mac地址和ip地址的映射
-			for i, j := range n.macMapping {
+			for i, j := range n.MacMapping {
 				if v.String() == j.String() {
-					delete(n.macMapping, i)
+					delete(n.MacMapping, i)
 					break
 				}
 			}
@@ -362,6 +360,6 @@ func (n *NetPools) ReleasePool(poolID string) error {
 
 func init() {
 	PoolManager.Pools = make(map[string]NetPool)
-	PoolManager.macMapping = make(map[string]net.IP)
+	PoolManager.MacMapping = make(map[string]net.IP)
 	PoolManager.rwlock = new(sync.RWMutex)
 }
