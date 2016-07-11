@@ -1,0 +1,117 @@
+{
+	"ImportPath": "appipam",
+	"GoVersion": "go1.6",
+	"GodepVersion": "v74",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/Microsoft/go-winio",
+			"Comment": "v0.3.5-2-gce2922f",
+			"Rev": "ce2922f643c8fd76b46cadc7f404a06282678b34"
+		},
+		{
+			"ImportPath": "github.com/Sirupsen/logrus",
+			"Comment": "v0.10.0-19-gf3cfb45",
+			"Rev": "f3cfb454f4c209e6668c95216c4744b8fddb2356"
+		},
+		{
+			"ImportPath": "github.com/astaxie/beego/logs",
+			"Comment": "v1.6.1-5-g88c5dfa",
+			"Rev": "88c5dfa6ead42e624c2e7d9e04eab6cb2d07412a"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/client",
+			"Comment": "v3.0.0-beta.0-667-g0cd5c65",
+			"Rev": "0cd5c658aad0372d1651f006b0739d82ca0fc20a"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/pkg/pathutil",
+			"Comment": "v3.0.0-beta.0-667-g0cd5c65",
+			"Rev": "0cd5c658aad0372d1651f006b0739d82ca0fc20a"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/pkg/types",
+			"Comment": "v3.0.0-beta.0-667-g0cd5c65",
+			"Rev": "0cd5c658aad0372d1651f006b0739d82ca0fc20a"
+		},
+		{
+			"ImportPath": "github.com/coreos/go-systemd/activation",
+			"Comment": "v10",
+			"Rev": "b32b8467dbea18858bfebf65c1a6a761090f2c31"
+		},
+		{
+			"ImportPath": "github.com/coreos/go-systemd/util",
+			"Comment": "v10",
+			"Rev": "b32b8467dbea18858bfebf65c1a6a761090f2c31"
+		},
+		{
+			"ImportPath": "github.com/coreos/pkg/dlopen",
+			"Comment": "v2-10-ga48e304",
+			"Rev": "a48e304ff9331be6d5df352b6b47bd1395ab5dd7"
+		},
+		{
+			"ImportPath": "github.com/docker/go-connections/sockets",
+			"Comment": "v0.2.0-8-g990a1a1",
+			"Rev": "990a1a1a70b0da4c4cb70e117971a4f0babfbf1a"
+		},
+		{
+			"ImportPath": "github.com/docker/go-plugins-helpers/ipam",
+			"Rev": "dd9c6831a796ea025dfae8448d6a34d081b99898"
+		},
+		{
+			"ImportPath": "github.com/docker/go-plugins-helpers/sdk",
+			"Rev": "dd9c6831a796ea025dfae8448d6a34d081b99898"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv",
+			"Comment": "v0.1.0-35-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv/store",
+			"Comment": "v0.1.0-35-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv/store/etcd",
+			"Comment": "v0.1.0-35-g7283ef2",
+			"Rev": "7283ef27ed32fe267388510a91709b307bb9942c"
+		},
+		{
+			"ImportPath": "github.com/opencontainers/runc/libcontainer/user",
+			"Comment": "v1.0.0-rc1-48-g629e356",
+			"Rev": "629e35666d31f743090452416c8df207d9fdbd34"
+		},
+		{
+			"ImportPath": "github.com/polaris1119/bitmap",
+			"Rev": "5731fcb409d1c5efd320f4f16f59004a61c6e654"
+		},
+		{
+			"ImportPath": "github.com/satori/go.uuid",
+			"Comment": "v1.1.0",
+			"Rev": "879c5887cd475cd7864858769793b2ceb0d44feb"
+		},
+		{
+			"ImportPath": "github.com/ugorji/go/codec",
+			"Rev": "b94837a2404ab90efe9289e77a70694c355739cb"
+		},
+		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "b400c2eff1badec7022a8c8f5bea058b6315eed7"
+		},
+		{
+			"ImportPath": "golang.org/x/net/proxy",
+			"Rev": "b400c2eff1badec7022a8c8f5bea058b6315eed7"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "62bee037599929a6e9146f29d10dd5208c43507d"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/windows",
+			"Rev": "62bee037599929a6e9146f29d10dd5208c43507d"
+		}
+	]
+}
