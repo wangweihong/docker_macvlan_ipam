@@ -282,6 +282,7 @@ func main() {
 	IpamBackend = bd
 
 	go IpamBackend.HealthCheck()
+	BackendClient = IpamBackend
 	//这里还需要进行backend和内存中的同步
 
 	//	setupSocket(config.PluginDir, config.DriverName)
