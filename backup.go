@@ -41,11 +41,13 @@ func NewBackend(defaultEndpoint string) *backend {
 	b.kv = st
 
 	//做一次健康检查
-	if !b.healthCheckOnce() {
-		logHandler.Debug("backend healthy check fail for %v", store.ErrNotReachable.Error())
-		return nil
-	}
+	/*
+		if !b.healthCheckOnce() {
+			logHandler.Debug("backend healthy check fail for %v", store.ErrNotReachable.Error())
+			return nil
+		}
 
+	*/
 	return b
 }
 
@@ -75,6 +77,27 @@ func (b *backend) Save(data interface{}) error {
 	}
 
 	return nil
+}
+
+func (b *backend) Get(data interface{}) error {
+	if !b.Alive() {
+		return fmt.Errorf("can not connect to backend")
+	}
+
+	kvpair, err := b.kv.Get(storeKey)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(kvpair.Value, data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+	//	kv.
+
 }
 
 func (b *backend) Remove(data interface{}) error {
@@ -143,6 +166,7 @@ type Backend interface {
 	Alive() bool
 	Save(interface{}) error
 	Remove(interface{}) error
+	Get(interface{}) error
 	HealthCheck()
 }
 

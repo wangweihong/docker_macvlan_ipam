@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	PoolManager NetPools
+	PoolManager *NetPools
 	IpamBackend Backend
 )
 
@@ -53,7 +53,7 @@ func (n *NetPool) put() {
 	n.Reference -= 1
 }
 
-//数组反向
+//数组逆序
 func sliceReverse(a []byte) {
 	for left, right := 0, len(a)-1; left < right; left, right = left+1, right-1 {
 		a[left], a[right] = a[right], a[left]
@@ -79,8 +79,9 @@ func compareIP(aIP, bIP net.IP) (int, error) {
 }
 
 //将ip地址转换成数字
+//0 - 意味着无效的Ip
 func IPtoNum(originIp net.IP) uint32 {
-	logHandler.Debug("net.IP : %v", len(originIp))
+	logHandler.Debug("net.IP len : %v", len(originIp))
 	ip := make([]byte, len(originIp))
 	copy(ip, originIp)
 
@@ -209,7 +210,7 @@ func (pool *NetPool) GetGateway(ipnet net.IPNet) (string, error) {
 
 		} else { //设置指定ip为已使用
 			if !appnetIPMap.SetBit(index, 1) {
-				//出错就忽视
+
 				logHandler.Error("try to set [%v] in ipbitmap fail", GatewayIP)
 				return "", errors.New("save ip address fail")
 			}
@@ -260,6 +261,12 @@ func (pool *NetPool) CreateNewAddress(reqAddr string) (net.IP, error) {
 		ipnet := pool.Subnet
 		start := IPtoNum(pool.LowIp)
 		end := IPtoNum(pool.MaxIp)
+		/*
+			start = uint32(index)
+			offset := index - uint64(IPtoNum(ipnet.IP))
+			logHandler.Debug("index:%v", index)
+			GatewayIP = ipAdd(ipnet.IP, uint32(offset))
+		*/
 
 		//找到一个可用的IP地址
 		var newip net.IP
@@ -269,9 +276,10 @@ func (pool *NetPool) CreateNewAddress(reqAddr string) (net.IP, error) {
 				return net.IP{}, err
 			}
 			start = uint32(index)
-			newip := ipAdd(ipnet.IP, uint32(index))
+			offset := index - uint64(IPtoNum(ipnet.IP))
+			newip = ipAdd(ipnet.IP, uint32(offset))
 
-			logHandler.Debug("check gateway ip %v is valid", newip.String())
+			logHandler.Debug("check  ip %v is valid", newip.String())
 			if !isvalidIP(newip) {
 				//尝试对无效ip写1,避免以后被使用
 				if !appnetIPMap.SetBit(index, 1) {
@@ -358,8 +366,20 @@ func (n *NetPools) ReleasePool(poolID string) error {
 	return nil
 }
 
+func InitNetPools() *NetPools {
+	var pools NetPools
+	pools.Pools = make(map[string]NetPool)
+	pools.MacMapping = make(map[string]net.IP)
+	pools.rwlock = new(sync.RWMutex)
+
+	return &pools
+
+}
+
 func init() {
-	PoolManager.Pools = make(map[string]NetPool)
-	PoolManager.MacMapping = make(map[string]net.IP)
-	PoolManager.rwlock = new(sync.RWMutex)
+	/*
+		PoolManager.Pools = make(map[string]NetPool)
+		PoolManager.MacMapping = make(map[string]net.IP)
+		PoolManager.rwlock = new(sync.RWMutex)
+	*/
 }

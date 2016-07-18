@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
+	"time"
 
 	"os"
 
@@ -143,7 +145,7 @@ func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.
 			//要处理mac地址的问题.不同容器使用了同一个mac地址，ip不同会出现问题。
 			//会出现mac地址相同的问题吗？
 			//暂时先不考虑
-		case "com.docker.network.endpoint.macaddres":
+		case "com.docker.network.endpoint.macaddress":
 			//已分配ip地址的mac地址不再分配ip
 			logHandler.Debug("check if mac address [%v] has used", v)
 			_, exists := PoolManager.MacMapping[v]
@@ -160,6 +162,8 @@ func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.
 			PoolManager.MacMapping[v] = ipaddr
 			pool.get()
 
+			iNet := net.IPNet{IP: ipaddr, Mask: pool.Subnet.Mask}
+
 			//这里需要完善备份失败后,数据应当如何还原
 			err = BackendClient.Save(PoolManager)
 			if err != nil {
@@ -172,13 +176,11 @@ func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.
 				return nil, err
 			}
 
-			return &ipam.RequestAddressResponse{
-				Address: ipaddr.String(),
-			}, nil
+			//返回的是CIDR地址
+			return &ipam.RequestAddressResponse{Address: iNet.String()}, nil
 
 		default:
 			logHandler.Debug("unhandler reqOption %v[%v]", k, v)
-
 		}
 	}
 
@@ -266,6 +268,21 @@ func setupSocket(pluginDir string, driverName string) string {
 	return sockerFile
 }
 
+func syncBackend() (*NetPools, error) {
+	for {
+		//	BackendClient.HealthCheck()
+		pools := InitNetPools()
+		err := BackendClient.Get(pools)
+		if err != nil {
+			logHandler.Error("sync BackendClient fail:%v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		return pools, nil
+	}
+}
+
 func main() {
 	config := LoadConfig()
 	if len(config.BackendUrl) == 0 {
@@ -275,14 +292,45 @@ func main() {
 	initLogger("./ipam.log")
 	logHandler.Debug("create appnet ipam handler...")
 
+	//待完成:同步备份的数据
+	//待完成2:后端数据库崩溃后,所有请求的失败处理
+	//待完成3:大量ip地址备份时,所需要的时间开销测试。以此来调整后端存储的格式。
 	bd := NewBackend(config.BackendUrl)
 	if bd == nil {
 		panic("create ipam backend client fail")
 	}
 	IpamBackend = bd
-
 	go IpamBackend.HealthCheck()
+
+	//避免后端存储仍未启动
+	var count int
+	for {
+		if !IpamBackend.Alive() {
+			if count == 0 {
+				logHandler.Debug("backend haven't start yet, wait..")
+			}
+			count += 1
+			if count == 20 {
+				count = 0
+			}
+			time.Sleep(3 * time.Second)
+			continue
+		}
+
+		logHandler.Debug("backend have start")
+		break
+	}
+
 	BackendClient = IpamBackend
+
+	var err error
+	PoolManager, err = syncBackend()
+	if err != nil {
+		logHandler.Error("sync backend fail for %v", err)
+		os.Exit(1)
+	}
+	logHandler.Debug("PoolMangger:%v", PoolManager)
+
 	//这里还需要进行backend和内存中的同步
 
 	//	setupSocket(config.PluginDir, config.DriverName)
@@ -292,7 +340,7 @@ func main() {
 	h := ipam.NewHandler(aIpam)
 
 	logHandler.Debug("serve 9527 ...")
-	err := h.ServeTCP("appnet", ":9527")
+	err = h.ServeTCP("appnet", ":9527")
 	if err != nil {
 		logHandler.Error("%v", err)
 	}
