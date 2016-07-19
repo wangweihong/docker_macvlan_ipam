@@ -11,6 +11,7 @@ var (
 	appnetIPMap *IPMap
 )
 
+// IPMap 数据结构定义
 type IPMap struct {
 	*bitmap.Bitmap
 }

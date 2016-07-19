@@ -66,8 +66,10 @@ func (aIpam *AppnetIpam) RequestPool(req *ipam.RequestPoolRequest) (*ipam.Reques
 	logHandler.Debug("subnet:%v,lowestip:%v,highest%v，", netpool.Subnet.String(), netpool.LowIp.String(), netpool.MaxIp.String())
 
 	//这里需要完善备份失败后,数据应当如何还原
+	logHandler.Debug("PoolManager:%v", PoolManager)
 	err = BackendClient.Save(PoolManager)
 	if err != nil {
+		logHandler.Debug("Save fail:%v", err)
 		logHandler.Debug("backend save fail")
 		return nil, err
 	}
@@ -93,7 +95,7 @@ func (aIpam *AppnetIpam) ReleasePool(req *ipam.ReleasePoolRequest) error {
 	//这里需要完善备份失败后,数据应当如何还原
 	err = BackendClient.Save(PoolManager)
 	if err != nil {
-		logHandler.Debug("backend save fail")
+		logHandler.Debug("Save fail:%v", err)
 		return err
 	}
 
@@ -126,8 +128,10 @@ func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.
 				logHandler.Debug("gateway ip :%v", addr)
 
 				//这里需要完善备份失败后,数据应当如何还原
+				logHandler.Debug("PoolManager:%v", PoolManager)
 				err = BackendClient.Save(PoolManager)
 				if err != nil {
+					logHandler.Debug("Save fail:%v", err)
 					ip, err1 := pool.ReleaseAddress(addr)
 					if err1 != nil {
 						logHandler.Debug("release address[%v] fail:%v", ip.String(), err.Error())
@@ -160,13 +164,14 @@ func (aIpam *AppnetIpam) RequestAddress(req *ipam.RequestAddressRequest) (*ipam.
 
 			//记录mac地址映射的ip
 			PoolManager.MacMapping[v] = ipaddr
-			pool.get()
 
 			iNet := net.IPNet{IP: ipaddr, Mask: pool.Subnet.Mask}
 
 			//这里需要完善备份失败后,数据应当如何还原
+			logHandler.Debug("PoolManager:%v", PoolManager)
 			err = BackendClient.Save(PoolManager)
 			if err != nil {
+				logHandler.Debug("Save fail:%v", err)
 				ip, err1 := pool.ReleaseAddress(addr)
 				if err1 != nil {
 					logHandler.Debug("release address[%v] fail:%v", ip.String(), err.Error())
@@ -271,9 +276,15 @@ func setupSocket(pluginDir string, driverName string) string {
 func syncBackend() (*NetPools, error) {
 	for {
 		//	BackendClient.HealthCheck()
+		logHandler.Debug("start to init pool manager")
 		pools := InitNetPools()
+		logHandler.Debug(" pool manager:%v\n", pools)
 		err := BackendClient.Get(pools)
 		if err != nil {
+			//可能是第一次启动
+			if err.Error() == ErrBackendKeyNotFound.Error() {
+				return pools, nil
+			}
 			logHandler.Error("sync BackendClient fail:%v", err)
 			time.Sleep(5 * time.Second)
 			continue
@@ -330,6 +341,7 @@ func main() {
 		os.Exit(1)
 	}
 	logHandler.Debug("PoolMangger:%v", PoolManager)
+	syncIpMap()
 
 	//这里还需要进行backend和内存中的同步
 

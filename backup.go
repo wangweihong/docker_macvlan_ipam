@@ -15,7 +15,8 @@ var (
 	storeKey      = "/appipam/ipam"
 	BackendClient Backend
 
-//	defaultEndpoint = "127.0.0.1:2379"
+	//	defaultEndpoint = "127.0.0.1:2379"
+	ErrBackendKeyNotFound = store.ErrKeyNotFound
 )
 
 type backend struct {

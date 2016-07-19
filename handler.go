@@ -14,20 +14,20 @@ var (
 )
 
 type NetPools struct {
-	Pools  map[string]NetPool
+	Pools  map[string]NetPool `json:"pools"`
 	rwlock *sync.RWMutex
 	//macaddress:net.IP
-	MacMapping map[string]net.IP
+	MacMapping map[string]net.IP `json:"macmapping"`
 }
 
 type NetPool struct {
-	Reference int
-	Subnet    net.IPNet
-	Gateway   string
+	Reference int       `json:"reference"`
+	Subnet    net.IPNet `json:"subnet"`
+	Gateway   string    `json:"gateway"`
 	//记录当前池使用了哪些网络 key:"192.168.0.1"
-	IPs   map[string]net.IP //value:转换后的数值
-	LowIp net.IP            //最低可用IP转换成数值
-	MaxIp net.IP            //最高可以用IP转换数值
+	IPs   map[string]net.IP `json:"ips"`    //value:转换后的数值
+	LowIp net.IP            `json:"lowip"`  //最低可用IP转换成数值
+	MaxIp net.IP            `json:"highip"` //最高可以用IP转换数值
 }
 
 func NewNetPool() *NetPool {
@@ -201,6 +201,7 @@ func (pool *NetPool) GetGateway(ipnet net.IPNet) (string, error) {
 
 		logHandler.Debug("check gateway ip %v is valid", GatewayIP.String())
 		if !isvalidIP(GatewayIP) {
+			logHandler.Debug("is not avail")
 			//尝试对无效ip写1,避免以后被使用
 			if !appnetIPMap.SetBit(index, 1) {
 				//出错就忽视
@@ -209,6 +210,7 @@ func (pool *NetPool) GetGateway(ipnet net.IPNet) (string, error) {
 			logHandler.Debug("get an invalid ip , skip, try next")
 
 		} else { //设置指定ip为已使用
+			logHandler.Debug("is  avail")
 			if !appnetIPMap.SetBit(index, 1) {
 
 				logHandler.Error("try to set [%v] in ipbitmap fail", GatewayIP)
@@ -221,6 +223,7 @@ func (pool *NetPool) GetGateway(ipnet net.IPNet) (string, error) {
 
 	logHandler.Debug("Gateway:%v", GatewayIP.String())
 	pool.Gateway = GatewayIP.String()
+	logHandler.Debug("pool gate way :%v", pool.Gateway)
 	pool.IPs[pool.Gateway] = GatewayIP
 	newIpnet := net.IPNet{
 		IP:   GatewayIP,
@@ -358,12 +361,27 @@ func (n *NetPools) ReleasePool(poolID string) error {
 			}
 			//2.清除ip位图
 			index := IPtoNum(v)
+			//更合理的处理
 			appnetIPMap.SetBit(uint64(index), 0)
 		}
 		delete(n.Pools, poolID)
 	}
 
 	return nil
+}
+
+func ipSetIpMap(ip net.IP) {
+	index := IPtoNum(ip)
+	appnetIPMap.SetBit(uint64(index), 1)
+}
+
+//ipmap位图太大，无法保存在etcd中，需要在同步时设置
+func syncIpMap() {
+	for _, v := range PoolManager.Pools {
+		for _, j := range v.IPs {
+			ipSetIpMap(j)
+		}
+	}
 }
 
 func InitNetPools() *NetPools {
