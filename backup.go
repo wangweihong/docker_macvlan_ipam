@@ -140,7 +140,7 @@ func (b *backend) HealthCheck() {
 				}
 			}
 			count1 += 1
-			if count1 == 20 {
+			if count1 == 100 {
 				count1 = 0
 			}
 		} else {
