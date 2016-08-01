@@ -2,5 +2,3 @@ FROM golang:1.6
 
 RUN mkdir -p /src
 ENV GOPATH=/
-ENTRYPOINT ["/src/appipam/scripts/build"]
-
