@@ -23,7 +23,7 @@
 执行`docker build -f Dockerfile.build -t appipam-build .` 生成appipam-build镜像
 
 2.返回到appipam父目录
-执行`docker run -rm -v `pwd`:/src /appipam-build` 生成代码目录
+执行`docker run -rm -v `pwd`:/src/appipam  -v `pwd`/dist:/src/dist appipam-build /src/scripts/build` 生成代码目录
 
 3.编译后在程序文件在appipam父目录下dist目录中
 
