@@ -303,6 +303,10 @@ func main() {
 	initLogger("./ipam.log")
 	logHandler.Debug("create appnet ipam handler...")
 
+	if os.Getenv("APPNET_DEBUG") != "true" {
+		CloseDebug()
+	}
+
 	//待完成:同步备份的数据
 	//待完成2:后端数据库崩溃后,所有请求的失败处理
 	//待完成3:大量ip地址备份时,所需要的时间开销测试。以此来调整后端存储的格式。

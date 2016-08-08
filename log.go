@@ -42,3 +42,7 @@ func initLogger(logfile string) error {
 	logHandler = log
 	return nil
 }
+
+func CloseDebug() {
+	logHandler.SetLevel(logs.LevelInfo)
+}
