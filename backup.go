@@ -12,7 +12,8 @@ import (
 
 var (
 	watchKey      = "/"
-	storeKey      = "/appipam/ipam"
+	appnetDirNode = "/appnet"
+	storeKey      = appnetDirNode + "/appipam/ipam"
 	BackendClient Backend
 
 	//	defaultEndpoint = "127.0.0.1:2379"
