@@ -62,8 +62,9 @@ func sliceReverse(a []byte) {
 
 //排除.0或者.255两个IP地址
 func isvalidIP(originIp net.IP) bool {
-	logHandler.Debug("originIp:%v", originIp.String())
+	logHandler.Debug("originIp:%v, bytes format ==> %v", originIp.String(), originIp)
 	lastByte := originIp[len(originIp)-1]
+	logHandler.Debug("last Byte is %v", lastByte)
 	if lastByte == uint8(0) || lastByte == uint8(255) {
 		return false
 	}
@@ -247,7 +248,7 @@ func (pool *NetPool) CreateNewAddress(reqAddr string) (net.IP, error) {
 		if appnetIPMap.GetBit(uint64(reqIndex)) == uint8(1) {
 			return net.IP{}, fmt.Errorf("request ip \"%v\"has beed used", reqAddr)
 		} else {
-			if isvalidIP(reqIP) {
+			if !isvalidIP(reqIP) {
 				return net.IP{}, fmt.Errorf("reqest ip \"%v\" is illeage", reqAddr)
 			}
 
@@ -395,9 +396,4 @@ func InitNetPools() *NetPools {
 }
 
 func init() {
-	/*
-		PoolManager.Pools = make(map[string]NetPool)
-		PoolManager.MacMapping = make(map[string]net.IP)
-		PoolManager.rwlock = new(sync.RWMutex)
-	*/
 }
